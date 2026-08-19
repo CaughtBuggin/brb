@@ -54,8 +54,8 @@
                     <button type="button" onclick="toggleInitialEmojiPicker()" id="initial-emoji-btn" class="w-12 h-12 bg-zinc-800 hover:bg-zinc-700 text-xl flex items-center justify-center rounded-xl border border-zinc-700 transition">
                         🚗
                     </button>
-                    <input id="activity-input" type="text" placeholder="e.g. Taking a shit/Running it mid" class="flex-1 p-3 rounded-xl bg-zinc-800 text-white border border-zinc-700 focus:outline-none focus:border-emerald-500">
-                    
+                    <input id="activity-input" type="text" placeholder="e.g. Taking a Poo / Running it mid" class="flex-1 p-3 rounded-xl bg-zinc-800 text-white border border-zinc-700 focus:outline-none focus:border-emerald-500">
+
                     <div id="initial-emoji-picker" class="hidden absolute left-0 top-14 bg-zinc-800 border border-zinc-700 p-2.5 rounded-2xl shadow-xl grid grid-cols-5 gap-2 z-50"></div>
                 </div>
             </div>
@@ -87,6 +87,7 @@
                 <span class="text-xs font-semibold text-zinc-500 uppercase tracking-widest">Current Task</span>
                 <h2 id="display-activity" class="text-2xl font-black text-white mt-0.5">--</h2>
                 <p id="display-eta-range" class="text-xs text-zinc-400 mt-1">Estimated Arrival: --</p>
+                <p id="display-eta-clock" class="text-xs text-emerald-400 font-mono mt-0.5">ETA Window: --</p>
             </div>
 
             <!-- Share Link Box (Visible only to Host) -->
@@ -164,7 +165,7 @@
 
     <script>
         const SUPABASE_URL = "https://ttelaqtavcbtyvigaesh.supabase.co";
-        const SUPABASE_KEY = "sb_publishable_9Rg9yXNixNJ04oTYzMQERQ_P_XJoD6l"; 
+        const SUPABASE_KEY = "sb_publishable_9Rg9yXNixNJ04oTYzMQERQ_P_XJoD6l";
         const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         let sessionId = window.location.hash.replace("#", "");
@@ -276,7 +277,8 @@
                 eta_mins: etaMins,
                 buffer_mins: bufferMins,
                 timeline: initialTimeline,
-                is_completed: false
+                is_completed: false,
+                created_at: new Date().toISOString()
             };
 
             renderView(sessionData);
@@ -375,6 +377,7 @@
                 document.getElementById('display-status').innerText = "This tracking link is invalid or has expired.";
                 document.getElementById('display-emoji').innerText = "❌";
                 document.getElementById('display-eta-range').innerText = "Unable to load ETA";
+                document.getElementById('display-eta-clock').innerText = "";
             }
         }
 
@@ -396,35 +399,48 @@
             pollTimer = setInterval(fetchSessionData, 3000);
         }
 
+        function formatClockTime(date) {
+            return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase();
+        }
+
         function renderView(data) {
             document.getElementById('display-activity').innerText = data.activity;
             document.getElementById('display-status').innerText = data.status;
             document.getElementById('display-emoji').innerText = data.emoji || '⏳';
             document.getElementById('share-link-input').value = window.location.href;
 
-            const minEta = data.eta_mins - data.buffer_mins;
-            const maxEta = data.eta_mins + data.buffer_mins;
-            document.getElementById('display-eta-range').innerText = data.is_completed
-                ? "Session completed"
-                : `Est. Time: ~${data.eta_mins} mins (${Math.max(1, minEta)}-${maxEta} min range)`;
+            const minEtaMins = Math.max(1, data.eta_mins - data.buffer_mins);
+            const maxEtaMins = data.eta_mins + data.buffer_mins;
+
+            const createdDate = new Date(data.created_at || Date.now());
+            const minClockDate = new Date(createdDate.getTime() + minEtaMins * 60 * 1000);
+            const maxClockDate = new Date(createdDate.getTime() + maxEtaMins * 60 * 1000);
+
+            if (data.is_completed) {
+                document.getElementById('display-eta-range').innerText = "Session completed";
+                document.getElementById('display-eta-clock').innerText = "Back on deck";
+            } else {
+                document.getElementById('display-eta-range').innerText = `Est. Duration: ~${data.eta_mins} mins (${minEtaMins}-${maxEtaMins} min range)`;
+                document.getElementById('display-eta-clock').innerText = `ETA Window: ${formatClockTime(minClockDate)} - ${formatClockTime(maxClockDate)}`;
+            }
 
             const timelineEl = document.getElementById('timeline-list');
             timelineEl.innerHTML = '';
             (data.timeline || []).forEach((item, index) => {
                 const isLatest = index === 0;
                 timelineEl.innerHTML += `
-              <div class="flex items-start gap-3 relative z-10">
-                <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs border ${isLatest ? 'bg-emerald-500 border-emerald-400 text-black font-bold' : 'bg-zinc-900 border-zinc-700 text-zinc-300'}">
-                  ${item.emoji}
-                </div>
-                <div class="flex-1 bg-zinc-900/50 p-2.5 rounded-xl border border-zinc-800/80">
-                  <div class="flex justify-between items-center">
-                    <span class="text-xs font-semibold ${isLatest ? 'text-emerald-400' : 'text-zinc-200'}">${item.status}</span>
-                    <span class="text-[10px] text-zinc-500">${item.time}</span>
+                  <div class="flex items-start gap-3 relative z-10">
+                    <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs border ${isLatest ? 'bg-emerald-500 border-emerald-400 text-black font-bold' : 'bg-zinc-900 border-zinc-700 text-zinc-300'}">
+                      ${item.emoji}
+                    </div>
+                    <div class="flex-1 bg-zinc-900/50 p-2.5 rounded-xl border border-zinc-800/80">
+                      <div class="flex justify-between items-center">
+                        <span class="text-xs font-semibold ${isLatest ? 'text-emerald-400' : 'text-zinc-200'}">${item.status}</span>
+                        <span class="text-[10px] text-zinc-500">${item.time}</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            `;
+                `;
             });
 
             updateProgress(data);
