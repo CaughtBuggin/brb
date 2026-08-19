@@ -46,15 +46,15 @@
 
         <!-- 1. HOST CREATION VIEW -->
         <div id="create-view" class="space-y-4">
-            <p class="text-zinc-400 text-sm">Set up your run and share the link with your group.</p>
+            <p class="text-zinc-400 text-sm">What the dawg doin?</p>
 
             <div>
-                <label class="text-xs text-zinc-400 font-semibold uppercase">Activity Title & Emoji</label>
+                <label class="text-xs text-zinc-400 font-semibold uppercase">EMOJI & TASK</label>
                 <div class="flex gap-2 mt-1 relative">
                     <button type="button" onclick="toggleInitialEmojiPicker()" id="initial-emoji-btn" class="w-12 h-12 bg-zinc-800 hover:bg-zinc-700 text-xl flex items-center justify-center rounded-xl border border-zinc-700 transition">
                         🚗
                     </button>
-                    <input id="activity-input" type="text" placeholder="e.g. Taco Bell run / Coffee trip" class="flex-1 p-3 rounded-xl bg-zinc-800 text-white border border-zinc-700 focus:outline-none focus:border-emerald-500">
+                    <input id="activity-input" type="text" placeholder="e.g. Taking a shit/Running it mid" class="flex-1 p-3 rounded-xl bg-zinc-800 text-white border border-zinc-700 focus:outline-none focus:border-emerald-500">
                     
                     <div id="initial-emoji-picker" class="hidden absolute left-0 top-14 bg-zinc-800 border border-zinc-700 p-2.5 rounded-2xl shadow-xl grid grid-cols-5 gap-2 z-50"></div>
                 </div>
@@ -84,7 +84,7 @@
 
             <!-- Top Overview -->
             <div>
-                <span class="text-xs font-semibold text-zinc-500 uppercase tracking-widest">Current Run</span>
+                <span class="text-xs font-semibold text-zinc-500 uppercase tracking-widest">Current Task</span>
                 <h2 id="display-activity" class="text-2xl font-black text-white mt-0.5">--</h2>
                 <p id="display-eta-range" class="text-xs text-zinc-400 mt-1">Estimated Arrival: --</p>
             </div>
@@ -135,13 +135,13 @@
                     <button type="button" onclick="toggleEmojiPicker()" id="selected-emoji-btn" class="w-12 h-11 bg-zinc-800 hover:bg-zinc-700 text-xl flex items-center justify-center rounded-xl border border-zinc-700 transition">
                         🚗
                     </button>
-                    <input id="custom-status" type="text" placeholder="e.g. Stuck in traffic..." class="flex-1 p-2.5 bg-zinc-800 text-white rounded-xl border border-zinc-700 text-sm focus:outline-none focus:border-emerald-500">
+                    <input id="custom-status" type="text" placeholder="e.g. Steve came in O.o" class="flex-1 p-2.5 bg-zinc-800 text-white rounded-xl border border-zinc-700 text-sm focus:outline-none focus:border-emerald-500">
 
                     <div id="emoji-picker" class="hidden absolute left-0 bottom-14 bg-zinc-800 border border-zinc-700 p-2.5 rounded-2xl shadow-xl grid grid-cols-5 gap-2 z-50"></div>
                 </div>
 
                 <button onclick="sendCustomUpdate()" class="w-full bg-emerald-500 hover:bg-emerald-400 text-black text-sm font-black py-3 rounded-xl transition shadow-lg">
-                    Post Status Update
+                    Update Status
                 </button>
             </div>
 
@@ -153,7 +153,7 @@
 
             <!-- HOST CONTROLS: MARK AS BACK (Bottom) -->
             <div id="host-finish-control" class="hidden pt-4 border-t border-zinc-800/80">
-                <button onclick="sendCustomUpdate('Arrived / Back!', '👋', true)" class="w-full bg-zinc-950 hover:bg-emerald-950 text-emerald-400 hover:text-emerald-300 border border-emerald-900/60 hover:border-emerald-600 text-xs font-bold py-2.5 rounded-xl transition">
+                <button onclick="sendCustomUpdate('Bro Is Back!', '👋', true)" class="w-full bg-zinc-950 hover:bg-emerald-950 text-emerald-400 hover:text-emerald-300 border border-emerald-900/60 hover:border-emerald-600 text-xs font-bold py-2.5 rounded-xl transition">
                     Mark as Complete / Back!
                 </button>
             </div>
@@ -257,7 +257,7 @@
         }
 
         async function createSession() {
-            const activity = document.getElementById('activity-input').value || "Quick Run";
+            const activity = document.getElementById('activity-input').value || "Gooning";
             const etaMins = parseInt(document.getElementById('eta-input').value) || 15;
             const bufferMins = parseInt(document.getElementById('buffer-input').value) || 5;
 
@@ -265,7 +265,7 @@
             window.location.hash = sessionId;
             isHost = true;
 
-            const initialStatus = `Started session for ${activity}`;
+            const initialStatus = `Bro is ${activity}`;
             const initialTimeline = [{ status: initialStatus, emoji: initialEmoji, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }];
 
             sessionData = {
