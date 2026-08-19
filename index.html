@@ -120,7 +120,7 @@
             <!-- HOST CONTROLS: POST UPDATE & ADJUST ETA -->
             <div id="host-controls" class="hidden space-y-3 p-4 bg-zinc-950 rounded-2xl border border-zinc-800 relative">
                 <div class="flex justify-between items-center">
-                    <p class="text-xs text-zinc-400 font-semibold uppercase">Send Update / Adjust ETA</p>
+                    <p class="text-xs text-zinc-400 font-semibold uppercase">Update Status</p>
                     <div class="flex gap-1.5">
                         <button onclick="adjustEta(-5)" type="button" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-bold px-2.5 py-1 rounded-lg border border-zinc-700 transition">
                             -5m
@@ -141,7 +141,7 @@
                 </div>
 
                 <button onclick="sendCustomUpdate()" class="w-full bg-emerald-500 hover:bg-emerald-400 text-black text-sm font-black py-3 rounded-xl transition shadow-lg">
-                    Update Status
+                    Send Update
                 </button>
             </div>
 
@@ -292,7 +292,7 @@
             if (!sessionData) return;
 
             const newEta = Math.max(1, (sessionData.eta_mins || 15) + deltaMins);
-            const statusText = `Adjusted ETA by ${deltaMins > 0 ? '+' : ''}${deltaMins} mins (New ETA: ~${newEta} mins)`;
+            const statusText = `ETA ${deltaMins > 0 ? '+' : ''}${deltaMins} mins (New ETA: ~${newEta} mins)`;
             const emojiText = deltaMins > 0 ? '⏳' : '⚡';
 
             const newEntry = {
