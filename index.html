@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>brb. - Live Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        @keyframes pulse-ring {
+            0% {
+                transform: scale(0.95);
+                opacity: 0.8;
+            }
+
+            50% {
+                transform: scale(1.1);
+                opacity: 0.4;
+            }
+
+            100% {
+                transform: scale(0.95);
+                opacity: 0.8;
+            }
+        }
+
+        .throbber {
+            animation: pulse-ring 2s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-black text-slate-100 min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="max-w-md w-full bg-zinc-900 border border-zinc-800 rounded-3xl p-6 shadow-2xl relative">
+
+        <!-- HEADER -->
+        <div class="flex items-center justify-between mb-6 pb-4 border-b border-zinc-800">
+            <h1 class="text-2xl font-black tracking-wider text-emerald-500 flex items-center gap-2">
+                <span>brb.</span>
+            </h1>
+            <div id="live-badge" class="hidden items-center gap-2 bg-emerald-950/80 border border-emerald-800/50 px-3 py-1 rounded-full">
+                <span class="w-2.5 h-2.5 bg-emerald-500 rounded-full throbber"></span>
+                <span class="text-xs font-bold text-emerald-400 uppercase tracking-widest">Live</span>
+            </div>
+        </div>
+
+        <!-- 1. HOST CREATION VIEW -->
+        <div id="create-view" class="space-y-4">
+            <p class="text-zinc-400 text-sm">Set up your run and share the link with your group.</p>
+
+            <div>
+                <label class="text-xs text-zinc-400 font-semibold uppercase">Activity Title</label>
+                <input id="activity-input" type="text" placeholder="e.g. Taco Bell run / Coffee trip" class="w-full mt-1 p-3 rounded-xl bg-zinc-800 text-white border border-zinc-700 focus:outline-none focus:border-emerald-500">
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="text-xs text-zinc-400 font-semibold uppercase">Base ETA (mins)</label>
+                    <input id="eta-input" type="number" value="15" class="w-full mt-1 p-3 rounded-xl bg-zinc-800 text-white border border-zinc-700 focus:outline-none focus:border-emerald-500">
+                </div>
+                <div>
+                    <label class="text-xs text-zinc-400 font-semibold uppercase">Buffer (+/- mins)</label>
+                    <input id="buffer-input" type="number" value="5" class="w-full mt-1 p-3 rounded-xl bg-zinc-800 text-white border border-zinc-700 focus:outline-none focus:border-emerald-500">
+                </div>
+            </div>
+
+            <button onclick="createSession()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-black font-bold py-3.5 rounded-xl transition mt-2">
+                Start Tracking Session
+            </button>
+        </div>
+
+        <!-- 2. CLIENT / TRACKING VIEW -->
+        <div id="status-view" class="hidden space-y-6">
+
+            <!-- Top Overview -->
+            <div>
+                <span class="text-xs font-semibold text-zinc-500 uppercase tracking-widest">Current Run</span>
+                <h2 id="display-activity" class="text-2xl font-black text-white mt-0.5">--</h2>
+                <p id="display-eta-range" class="text-xs text-zinc-400 mt-1">Estimated Arrival: --</p>
+            </div>
+
+            <!-- Share Link Box -->
+            <div class="bg-zinc-950 p-3 rounded-xl border border-zinc-800 flex items-center justify-between gap-2">
+                <input id="share-link-input" type="text" readonly class="bg-transparent text-xs text-zinc-400 w-full focus:outline-none truncate">
+                <button onclick="copyShareLink()" id="copy-btn" class="bg-zinc-800 hover:bg-zinc-700 text-emerald-400 text-xs font-bold px-3 py-1.5 rounded-lg border border-zinc-700 whitespace-nowrap transition">
+                    Copy Link
+                </button>
+            </div>
+
+            <!-- Progress Bar Container -->
+            <div class="space-y-2">
+                <div class="flex justify-between text-xs text-zinc-400 font-medium">
+                    <span>Progress</span>
+                    <span id="progress-text">0%</span>
+                </div>
+                <div class="w-full h-3 bg-zinc-800 rounded-full overflow-hidden p-0.5 border border-zinc-700/50">
+                    <div id="progress-bar" class="h-full bg-emerald-500 rounded-full transition-all duration-1000 ease-out" style="width: 5%"></div>
+                </div>
+            </div>
+
+            <!-- Current Step Banner -->
+            <div class="bg-zinc-800/80 border border-zinc-700/60 p-4 rounded-2xl flex items-center gap-4">
+                <div id="display-emoji" class="text-3xl bg-zinc-900 p-2.5 rounded-xl border border-zinc-700">⏳</div>
+                <div>
+                    <span class="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Latest Update</span>
+                    <p id="display-status" class="text-base font-bold text-white leading-snug">Initial status setting up...</p>
+                </div>
+            </div>
+
+            <!-- HOST CONTROLS: POST UPDATE -->
+            <div id="host-controls" class="hidden space-y-3 p-4 bg-zinc-950 rounded-2xl border border-zinc-800 relative">
+                <p class="text-xs text-zinc-400 font-semibold uppercase">Send Custom Update</p>
+
+                <div class="flex gap-2 relative">
+                    <button type="button" onclick="toggleEmojiPicker()" id="selected-emoji-btn" class="w-12 h-11 bg-zinc-800 hover:bg-zinc-700 text-xl flex items-center justify-center rounded-xl border border-zinc-700 transition">
+                        🚗
+                    </button>
+                    <input id="custom-status" type="text" placeholder="e.g. Stuck in line..." class="flex-1 p-2.5 bg-zinc-800 text-white rounded-xl border border-zinc-700 text-sm focus:outline-none focus:border-emerald-500">
+
+                    <!-- Randomized Emoji Picker Grid -->
+                    <div id="emoji-picker" class="hidden absolute left-0 bottom-14 bg-zinc-800 border border-zinc-700 p-2.5 rounded-2xl shadow-xl grid grid-cols-5 gap-2 z-50">
+                        <!-- Dynamically populated -->
+                    </div>
+                </div>
+
+                <button onclick="sendCustomUpdate()" class="w-full bg-emerald-500 hover:bg-emerald-400 text-black text-sm font-black py-3 rounded-xl transition shadow-lg">
+                    Post Status Update
+                </button>
+            </div>
+
+            <!-- TIMELINE -->
+            <div class="pt-2">
+                <h3 class="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4">Status Timeline</h3>
+                <div id="timeline-list" class="space-y-4 relative before:absolute before:inset-0 before:left-3.5 before:w-0.5 before:bg-zinc-800">
+                    <!-- Dynamically populated -->
+                </div>
+            </div>
+
+            <!-- HOST CONTROLS: MARK AS BACK (Bottom) -->
+            <div id="host-finish-control" class="hidden pt-4 border-t border-zinc-800/80">
+                <button onclick="sendCustomUpdate('Arrived / Back!', '👋', true)" class="w-full bg-zinc-950 hover:bg-emerald-950 text-emerald-400 hover:text-emerald-300 border border-emerald-900/60 hover:border-emerald-600 text-xs font-bold py-2.5 rounded-xl transition">
+                    Mark as Complete / Back!
+                </button>
+            </div>
+
+        </div>
+
+    </div>
+
+    <script>
+        // 1. Supabase Initialization
+        const SUPABASE_URL = "https://ttelaqtavcbtyvigaesh.supabase.co";
+        const SUPABASE_KEY = "sb_publishable_9Rg9yXNixNJ04oTYzMQERQ_P_XJoD6l"; // Insert your anon key
+        const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        let sessionId = window.location.hash.replace("#", "");
+        let isHost = false;
+        let sessionData = null;
+        let progressTimer = null;
+        let currentEmoji = '🚗';
+
+        const EMOJI_BANK = ['🚗', '🍔', '☕', '🚦', '🛍️', '⏳', '🏃', '📦', '✅', '👀', '🍕', '🎉', '🛑', '⛽', '🌯', '🍦', '🍩', '🥤', '🛒', '🚲', '🛴', '🚶', '⌛', '🔔', '💬', '🔥', '✨', '⚡'];
+
+        if (sessionId) {
+            loadSession(sessionId);
+        }
+
+        function copyShareLink() {
+            const linkInput = document.getElementById('share-link-input');
+            navigator.clipboard.writeText(linkInput.value);
+            const btn = document.getElementById('copy-btn');
+            btn.innerText = "Copied!";
+            setTimeout(() => btn.innerText = "Copy Link", 2000);
+        }
+
+        // RANDOM EMOJI PICKER GENERATOR
+        function toggleEmojiPicker() {
+            const picker = document.getElementById('emoji-picker');
+            if (picker.classList.contains('hidden')) {
+                // Pick 10 random emojis from the bank
+                const shuffled = [...EMOJI_BANK].sort(() => 0.5 - Math.random()).slice(0, 10);
+                picker.innerHTML = '';
+                shuffled.forEach(emoji => {
+                    const btn = document.createElement('button');
+                    btn.className = 'text-xl p-1.5 hover:bg-zinc-700 rounded-lg transition';
+                    btn.innerText = emoji;
+                    btn.onclick = () => selectEmoji(emoji);
+                    picker.appendChild(btn);
+                });
+                picker.classList.remove('hidden');
+            } else {
+                picker.classList.add('hidden');
+            }
+        }
+
+        function selectEmoji(emoji) {
+            currentEmoji = emoji;
+            document.getElementById('selected-emoji-btn').innerText = emoji;
+            document.getElementById('emoji-picker').classList.add('hidden');
+        }
+
+        // CREATE SESSION
+        async function createSession() {
+            const activity = document.getElementById('activity-input').value || "Quick Run";
+            const etaMins = parseInt(document.getElementById('eta-input').value) || 15;
+            const bufferMins = parseInt(document.getElementById('buffer-input').value) || 5;
+
+            sessionId = Math.random().toString(36).substring(2, 7);
+            window.location.hash = sessionId;
+            isHost = true;
+
+            const initialStatus = `Started session for ${activity}`;
+            const initialTimeline = [{ status: initialStatus, emoji: '🚀', time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }];
+
+            sessionData = {
+                id: sessionId,
+                activity: activity,
+                status: initialStatus,
+                emoji: '🚀',
+                eta_mins: etaMins,
+                buffer_mins: bufferMins,
+                timeline: initialTimeline,
+                is_completed: false
+            };
+
+            renderView(sessionData);
+            showStatusView();
+
+            const { error } = await db.from('status_sessions').insert([sessionData]);
+            if (error) console.error("Error creating session:", error);
+
+            listenForUpdates();
+        }
+
+        // SEND UPDATE
+        async function sendCustomUpdate(overrideText, overrideEmoji, isDone = false) {
+            const statusText = overrideText || document.getElementById('custom-status').value;
+            const emojiText = overrideEmoji || currentEmoji;
+
+            if (!statusText) return;
+
+            const newEntry = {
+                status: statusText,
+                emoji: emojiText,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+
+            const updatedTimeline = [newEntry, ...(sessionData.timeline || [])];
+
+            sessionData.status = statusText;
+            sessionData.emoji = emojiText;
+            sessionData.timeline = updatedTimeline;
+            sessionData.is_completed = isDone;
+            renderView(sessionData);
+
+            document.getElementById('custom-status').value = '';
+
+            const { error } = await db.from('status_sessions').update({
+                status: statusText,
+                emoji: emojiText,
+                timeline: updatedTimeline,
+                is_completed: isDone,
+                updated_at: new Date()
+            }).eq('id', sessionId);
+
+            if (error) console.error("Error updating session:", error);
+        }
+
+        // LOAD SESSION
+        async function loadSession(id) {
+            showStatusView();
+            const { data, error } = await db.from('status_sessions').select('*').eq('id', id).maybeSingle();
+
+            if (data) {
+                sessionData = data;
+                renderView(data);
+            } else {
+                document.getElementById('display-status').innerText = "Session not found.";
+            }
+
+            listenForUpdates();
+        }
+
+        // REAL-TIME LISTENER
+        function listenForUpdates() {
+            db.channel(`session-${sessionId}`)
+                .on('postgres_changes', { event: 'UPDATE', filter: `id=eq.${sessionId}`, schema: 'public' }, payload => {
+                    sessionData = payload.new;
+                    renderView(payload.new);
+                })
+                .subscribe();
+        }
+
+        // RENDER UI
+        function renderView(data) {
+            document.getElementById('display-activity').innerText = data.activity;
+            document.getElementById('display-status').innerText = data.status;
+            document.getElementById('display-emoji').innerText = data.emoji || '⏳';
+            document.getElementById('share-link-input').value = window.location.href;
+
+            const minEta = data.eta_mins - data.buffer_mins;
+            const maxEta = data.eta_mins + data.buffer_mins;
+            document.getElementById('display-eta-range').innerText = data.is_completed
+                ? "Session completed"
+                : `Est. Time: ~${data.eta_mins} mins (${Math.max(1, minEta)}-${maxEta} min range)`;
+
+            const timelineEl = document.getElementById('timeline-list');
+            timelineEl.innerHTML = '';
+            (data.timeline || []).forEach((item, index) => {
+                const isLatest = index === 0;
+                timelineEl.innerHTML += `
+              <div class="flex items-start gap-3 relative z-10">
+                <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs border ${isLatest ? 'bg-emerald-500 border-emerald-400 text-black font-bold' : 'bg-zinc-900 border-zinc-700 text-zinc-300'}">
+                  ${item.emoji}
+                </div>
+                <div class="flex-1 bg-zinc-900/50 p-2.5 rounded-xl border border-zinc-800/80">
+                  <div class="flex justify-between items-center">
+                    <span class="text-xs font-semibold ${isLatest ? 'text-emerald-400' : 'text-zinc-200'}">${item.status}</span>
+                    <span class="text-[10px] text-zinc-500">${item.time}</span>
+                  </div>
+                </div>
+              </div>
+            `;
+            });
+
+            updateProgress(data);
+        }
+
+        function updateProgress(data) {
+            if (progressTimer) clearInterval(progressTimer);
+
+            if (data.is_completed) {
+                document.getElementById('progress-bar').style.width = '100%';
+                document.getElementById('progress-text').innerText = '100%';
+                document.getElementById('live-badge').classList.add('hidden');
+                return;
+            }
+
+            const startTime = new Date(data.created_at || Date.now()).getTime();
+            const totalDurationMs = data.eta_mins * 60 * 1000;
+
+            progressTimer = setInterval(() => {
+                const elapsed = Date.now() - startTime;
+                let rawRatio = elapsed / totalDurationMs;
+
+                let simulatedPercent = Math.min(95, Math.floor((1 - Math.exp(-2.5 * rawRatio)) * 95));
+                if (simulatedPercent < 5) simulatedPercent = 5;
+
+                document.getElementById('progress-bar').style.width = `${simulatedPercent}%`;
+                document.getElementById('progress-text').innerText = `${simulatedPercent}%`;
+            }, 1000);
+        }
+
+        function showStatusView() {
+            document.getElementById('create-view').classList.add('hidden');
+            document.getElementById('status-view').classList.remove('hidden');
+            document.getElementById('live-badge').classList.remove('hidden');
+            document.getElementById('live-badge').classList.add('flex');
+            if (isHost) {
+                document.getElementById('host-controls').classList.remove('hidden');
+                document.getElementById('host-finish-control').classList.remove('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
