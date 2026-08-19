@@ -92,6 +92,14 @@
                 <p id="display-eta-range" class="text-xs text-zinc-400 mt-1">Estimated Arrival: --</p>
             </div>
 
+            <!-- Share Link Box (Visible only to Host) -->
+            <div id="host-share-box" class="hidden bg-zinc-950 p-3 rounded-xl border border-zinc-800 flex items-center justify-between gap-2">
+                <input id="share-link-input" type="text" readonly class="bg-transparent text-xs text-zinc-400 w-full focus:outline-none truncate">
+                <button onclick="copyShareLink()" id="copy-btn" class="bg-zinc-800 hover:bg-zinc-700 text-emerald-400 text-xs font-bold px-3 py-1.5 rounded-lg border border-zinc-700 whitespace-nowrap transition">
+                    Copy Link
+                </button>
+            </div>
+
             <!-- Progress Bar Container -->
             <div class="space-y-2">
                 <div class="flex justify-between text-xs text-zinc-400 font-medium">
@@ -168,6 +176,14 @@
 
         if (sessionId) {
             loadSession(sessionId);
+        }
+
+        function copyShareLink() {
+            const linkInput = document.getElementById('share-link-input');
+            navigator.clipboard.writeText(linkInput.value);
+            const btn = document.getElementById('copy-btn');
+            btn.innerText = "Copied!";
+            setTimeout(() => btn.innerText = "Copy Link", 2000);
         }
 
         function updateBufferDisplay(val) {
@@ -314,6 +330,7 @@
             document.getElementById('display-activity').innerText = data.activity;
             document.getElementById('display-status').innerText = data.status;
             document.getElementById('display-emoji').innerText = data.emoji || '⏳';
+            document.getElementById('share-link-input').value = window.location.href;
 
             const minEta = data.eta_mins - data.buffer_mins;
             const maxEta = data.eta_mins + data.buffer_mins;
@@ -374,6 +391,7 @@
             document.getElementById('live-badge').classList.remove('hidden');
             document.getElementById('live-badge').classList.add('flex');
             if (isHost) {
+                document.getElementById('host-share-box').classList.remove('hidden');
                 document.getElementById('host-controls').classList.remove('hidden');
                 document.getElementById('host-finish-control').classList.remove('hidden');
             }
