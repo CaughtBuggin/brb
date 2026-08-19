@@ -56,10 +56,7 @@
                     </button>
                     <input id="activity-input" type="text" placeholder="e.g. Taco Bell run / Coffee trip" class="flex-1 p-3 rounded-xl bg-zinc-800 text-white border border-zinc-700 focus:outline-none focus:border-emerald-500">
                     
-                    <!-- Initial Emoji Picker Grid -->
-                    <div id="initial-emoji-picker" class="hidden absolute left-0 top-14 bg-zinc-800 border border-zinc-700 p-2.5 rounded-2xl shadow-xl grid grid-cols-5 gap-2 z-50">
-                        <!-- Dynamically populated -->
-                    </div>
+                    <div id="initial-emoji-picker" class="hidden absolute left-0 top-14 bg-zinc-800 border border-zinc-700 p-2.5 rounded-2xl shadow-xl grid grid-cols-5 gap-2 z-50"></div>
                 </div>
             </div>
 
@@ -130,10 +127,7 @@
                     </button>
                     <input id="custom-status" type="text" placeholder="e.g. Stuck in line..." class="flex-1 p-2.5 bg-zinc-800 text-white rounded-xl border border-zinc-700 text-sm focus:outline-none focus:border-emerald-500">
 
-                    <!-- Randomized Emoji Picker Grid -->
-                    <div id="emoji-picker" class="hidden absolute left-0 bottom-14 bg-zinc-800 border border-zinc-700 p-2.5 rounded-2xl shadow-xl grid grid-cols-5 gap-2 z-50">
-                        <!-- Dynamically populated -->
-                    </div>
+                    <div id="emoji-picker" class="hidden absolute left-0 bottom-14 bg-zinc-800 border border-zinc-700 p-2.5 rounded-2xl shadow-xl grid grid-cols-5 gap-2 z-50"></div>
                 </div>
 
                 <button onclick="sendCustomUpdate()" class="w-full bg-emerald-500 hover:bg-emerald-400 text-black text-sm font-black py-3 rounded-xl transition shadow-lg">
@@ -144,9 +138,7 @@
             <!-- TIMELINE -->
             <div class="pt-2">
                 <h3 class="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4">Status Timeline</h3>
-                <div id="timeline-list" class="space-y-4 relative before:absolute before:inset-0 before:left-3.5 before:w-0.5 before:bg-zinc-800">
-                    <!-- Dynamically populated -->
-                </div>
+                <div id="timeline-list" class="space-y-4 relative before:absolute before:inset-0 before:left-3.5 before:w-0.5 before:bg-zinc-800"></div>
             </div>
 
             <!-- HOST CONTROLS: MARK AS BACK (Bottom) -->
@@ -169,6 +161,7 @@
         let isHost = false;
         let sessionData = null;
         let progressTimer = null;
+        let pollTimer = null;
         let initialEmoji = '🚗';
         let currentEmoji = '🚗';
 
@@ -188,6 +181,21 @@
 
         function updateBufferDisplay(val) {
             document.getElementById('buffer-val').innerText = `± ${val} mins`;
+        }
+
+        function requestNotificationPermission() {
+            if ("Notification" in window && Notification.permission === "default") {
+                Notification.requestPermission();
+            }
+        }
+
+        function triggerNotification(statusText, emojiText) {
+            if ("Notification" in window && Notification.permission === "granted") {
+                new Notification("brb. Status Update", {
+                    body: `${emojiText} ${statusText}`,
+                    icon: "/favicon.ico"
+                });
+            }
         }
 
         function toggleInitialEmojiPicker() {
@@ -267,7 +275,7 @@
             const { error } = await db.from('sessions').insert([sessionData]);
             if (error) console.error("Error creating session:", error);
 
-            listenForUpdates();
+            startAutoUpdate();
         }
 
         async function sendCustomUpdate(overrideText, overrideEmoji, isDone = false) {
@@ -305,72 +313,48 @@
 
         async function loadSession(id) {
             showStatusView();
-    
-            // Request notification access when viewing as a client
-            if (!isHost) {
-                requestNotificationPermission();
-            }
+            if (!isHost) requestNotificationPermission();
 
-            const { data, error } = await db.from('sessions').select('*').eq('id', id).maybeSingle();
+            await fetchSessionData();
+            startAutoUpdate();
+        }
+
+        async function fetchSessionData() {
+            const { data, error } = await db.from('sessions').select('*').eq('id', sessionId).maybeSingle();
 
             if (data) {
+                // If status changed and viewer is client, send notification
+                if (!isHost && sessionData && sessionData.status !== data.status) {
+                    triggerNotification(data.status, data.emoji || '🚗');
+                }
                 sessionData = data;
                 renderView(data);
-            } else {
+            } else if (!sessionData) {
                 document.getElementById('display-activity').innerText = "Session Not Found";
                 document.getElementById('display-status').innerText = "This tracking link is invalid or has expired.";
                 document.getElementById('display-emoji').innerText = "❌";
                 document.getElementById('display-eta-range').innerText = "Unable to load ETA";
             }
-
-            listenForUpdates();
         }
 
-        function requestNotificationPermission() {
-            if ("Notification" in window && Notification.permission === "default") {
-                Notification.requestPermission();
-            }
-        }
-
-        function triggerClientNotification(statusText, emojiText) {
-            if ("Notification" in window && Notification.permission === "granted") {
-                new Notification("brb. Status Update", {
-                    body: `${emojiText} ${statusText}`,
-                    icon: "/favicon.ico"
-                });
-            }
-        }
-
-        function listenForUpdates() {
-            // Clean up existing subscriptions to prevent duplicate listeners
-            supabase.removeAllChannels();
-        
-            supabase
-                .channel(`session-${sessionId}`)
-                .on(
-                    'postgres_changes',
-                    {
-                        event: '*', // Listen to INSERT and UPDATE events
-                        schema: 'public',
-                        table: 'sessions',
-                        filter: `id=eq.${sessionId}`
-                    },
-                    (payload) => {
-                        const newData = payload.new;
-                        if (!newData) return;
-
-                        // Notify client if status actually changed
-                        if (!isHost && sessionData && sessionData.status !== newData.status) {
-                            triggerClientNotification(newData.status, newData.emoji || '🚗');
+        function startAutoUpdate() {
+            // 1. Supabase WebSockets (Realtime)
+            db.removeAllChannels();
+            db.channel(`session-${sessionId}`)
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'sessions', filter: `id=eq.${sessionId}` }, payload => {
+                    if (payload.new) {
+                        if (!isHost && sessionData && sessionData.status !== payload.new.status) {
+                            triggerNotification(payload.new.status, payload.new.emoji || '🚗');
                         }
-
-                        sessionData = newData;
-                        renderView(newData);
+                        sessionData = payload.new;
+                        renderView(payload.new);
                     }
-                )
-                .subscribe((status) => {
-                    console.log("Realtime subscription status:", status);
-                });
+                })
+                .subscribe();
+
+            // 2. Interval Polling (Guaranteed 3s Fallback if WebSockets drop/fail)
+            if (pollTimer) clearInterval(pollTimer);
+            pollTimer = setInterval(fetchSessionData, 3000);
         }
 
         function renderView(data) {
