@@ -117,15 +117,25 @@
                 </div>
             </div>
 
-            <!-- HOST CONTROLS: POST UPDATE -->
+            <!-- HOST CONTROLS: POST UPDATE & ADJUST ETA -->
             <div id="host-controls" class="hidden space-y-3 p-4 bg-zinc-950 rounded-2xl border border-zinc-800 relative">
-                <p class="text-xs text-zinc-400 font-semibold uppercase">Send Custom Update</p>
+                <div class="flex justify-between items-center">
+                    <p class="text-xs text-zinc-400 font-semibold uppercase">Send Update / Adjust ETA</p>
+                    <div class="flex gap-1.5">
+                        <button onclick="adjustEta(-5)" type="button" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-bold px-2.5 py-1 rounded-lg border border-zinc-700 transition">
+                            -5m
+                        </button>
+                        <button onclick="adjustEta(5)" type="button" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-bold px-2.5 py-1 rounded-lg border border-zinc-700 transition">
+                            +5m
+                        </button>
+                    </div>
+                </div>
 
                 <div class="flex gap-2 relative">
                     <button type="button" onclick="toggleEmojiPicker()" id="selected-emoji-btn" class="w-12 h-11 bg-zinc-800 hover:bg-zinc-700 text-xl flex items-center justify-center rounded-xl border border-zinc-700 transition">
                         🚗
                     </button>
-                    <input id="custom-status" type="text" placeholder="e.g. Stuck in line..." class="flex-1 p-2.5 bg-zinc-800 text-white rounded-xl border border-zinc-700 text-sm focus:outline-none focus:border-emerald-500">
+                    <input id="custom-status" type="text" placeholder="e.g. Stuck in traffic..." class="flex-1 p-2.5 bg-zinc-800 text-white rounded-xl border border-zinc-700 text-sm focus:outline-none focus:border-emerald-500">
 
                     <div id="emoji-picker" class="hidden absolute left-0 bottom-14 bg-zinc-800 border border-zinc-700 p-2.5 rounded-2xl shadow-xl grid grid-cols-5 gap-2 z-50"></div>
                 </div>
@@ -278,6 +288,38 @@
             startAutoUpdate();
         }
 
+        async function adjustEta(deltaMins) {
+            if (!sessionData) return;
+
+            const newEta = Math.max(1, (sessionData.eta_mins || 15) + deltaMins);
+            const statusText = `Adjusted ETA by ${deltaMins > 0 ? '+' : ''}${deltaMins} mins (New ETA: ~${newEta} mins)`;
+            const emojiText = deltaMins > 0 ? '⏳' : '⚡';
+
+            const newEntry = {
+                status: statusText,
+                emoji: emojiText,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+
+            const updatedTimeline = [newEntry, ...(sessionData.timeline || [])];
+
+            sessionData.eta_mins = newEta;
+            sessionData.status = statusText;
+            sessionData.emoji = emojiText;
+            sessionData.timeline = updatedTimeline;
+            renderView(sessionData);
+
+            const { error } = await db.from('sessions').update({
+                eta_mins: newEta,
+                status: statusText,
+                emoji: emojiText,
+                timeline: updatedTimeline,
+                updated_at: new Date()
+            }).eq('id', sessionId);
+
+            if (error) console.error("Error adjusting ETA:", error);
+        }
+
         async function sendCustomUpdate(overrideText, overrideEmoji, isDone = false) {
             const statusText = overrideText || document.getElementById('custom-status').value;
             const emojiText = overrideEmoji || currentEmoji;
@@ -323,7 +365,6 @@
             const { data, error } = await db.from('sessions').select('*').eq('id', sessionId).maybeSingle();
 
             if (data) {
-                // If status changed and viewer is client, send notification
                 if (!isHost && sessionData && sessionData.status !== data.status) {
                     triggerNotification(data.status, data.emoji || '🚗');
                 }
@@ -338,7 +379,6 @@
         }
 
         function startAutoUpdate() {
-            // 1. Supabase WebSockets (Realtime)
             db.removeAllChannels();
             db.channel(`session-${sessionId}`)
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'sessions', filter: `id=eq.${sessionId}` }, payload => {
@@ -352,7 +392,6 @@
                 })
                 .subscribe();
 
-            // 2. Interval Polling (Guaranteed 3s Fallback if WebSockets drop/fail)
             if (pollTimer) clearInterval(pollTimer);
             pollTimer = setInterval(fetchSessionData, 3000);
         }
