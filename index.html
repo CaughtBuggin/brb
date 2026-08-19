@@ -305,6 +305,12 @@
 
         async function loadSession(id) {
             showStatusView();
+    
+            // Request notification access when viewing as a client
+            if (!isHost) {
+                requestNotificationPermission();
+            }
+
             const { data, error } = await db.from('sessions').select('*').eq('id', id).maybeSingle();
 
             if (data) {
@@ -320,13 +326,51 @@
             listenForUpdates();
         }
 
+        function requestNotificationPermission() {
+            if ("Notification" in window && Notification.permission === "default") {
+                Notification.requestPermission();
+            }
+        }
+
+        function triggerClientNotification(statusText, emojiText) {
+            if ("Notification" in window && Notification.permission === "granted") {
+                new Notification("brb. Status Update", {
+                    body: `${emojiText} ${statusText}`,
+                    icon: "/favicon.ico"
+                });
+            }
+        }
+
         function listenForUpdates() {
-            db.channel(`session-${sessionId}`)
-                .on('postgres_changes', { event: 'UPDATE', filter: `id=eq.${sessionId}`, schema: 'public' }, payload => {
-                    sessionData = payload.new;
-                    renderView(payload.new);
-                })
-                .subscribe();
+            // Clean up existing subscriptions to prevent duplicate listeners
+            supabase.removeAllChannels();
+        
+            supabase
+                .channel(`session-${sessionId}`)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: '*', // Listen to INSERT and UPDATE events
+                        schema: 'public',
+                        table: 'sessions',
+                        filter: `id=eq.${sessionId}`
+                    },
+                    (payload) => {
+                        const newData = payload.new;
+                        if (!newData) return;
+
+                        // Notify client if status actually changed
+                        if (!isHost && sessionData && sessionData.status !== newData.status) {
+                            triggerClientNotification(newData.status, newData.emoji || '🚗');
+                        }
+
+                        sessionData = newData;
+                        renderView(newData);
+                    }
+                )
+                .subscribe((status) => {
+                    console.log("Realtime subscription status:", status);
+                });
         }
 
         function renderView(data) {
