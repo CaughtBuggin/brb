@@ -311,7 +311,10 @@
                 sessionData = data;
                 renderView(data);
             } else {
-                document.getElementById('display-status').innerText = "Session not found.";
+                document.getElementById('display-activity').innerText = "Session Not Found";
+                document.getElementById('display-status').innerText = "This tracking link is invalid or has expired.";
+                document.getElementById('display-emoji').innerText = "❌";
+                document.getElementById('display-eta-range').innerText = "Unable to load ETA";
             }
 
             listenForUpdates();
